@@ -1,198 +1,263 @@
-# Biglegs - 智能体状态监控系统
+# OpenClaw Agent Status Monitoring System - Frontend
 
 <div align="center">
 
-![Biglegs Logo](./public/vite.svg)
+![OpenClaw Logo](./public/vite.svg)
 
-**一个轻量级、开源的智能体状态监控平台**
+**A lightweight, open-source agent status monitoring platform**
 
-[在线演示](http://47.109.47.116/) | [问题反馈](https://github.com/flik2002/openclaw-monitor-frontend/issues) | [功能建议](https://github.com/flik2002/openclaw-monitor-frontend/issues)
+[Live Demo](http://47.109.47.116/) | [Report Bug](https://github.com/flik2002/openclaw-monitor-frontend/issues) | [Request Feature](https://github.com/flik2002/openclaw-monitor-frontend/issues)
 
 </div>
 
 ---
 
-## 📖 项目简介
+## 📖 Overview
 
-Biglegs是一个专为智能体（Agent）监控设计的轻量级Web应用，提供实时状态监控、心跳检测、Gateway管理等功能。
+OpenClaw Monitor is a lightweight web application designed for agent (intelligent agent) monitoring, providing real-time status monitoring, heartbeat detection, and gateway management capabilities.
 
-### ✨ 核心特性
+### ✨ Key Features
 
-- 🔐 **用户认证** - 安全的注册/登录系统，JWT Token验证
-- 💓 **心跳维持** - 自动心跳检测，保持在线状态
-- 🌐 **Gateway管理** - 本地管理多个Gateway配置
-- 📊 **实时监控** - 实时查看智能体状态和运行情况
-- 🎨 **现代UI** - 基于Vue3 + Element Plus的现代化界面
-- 📱 **响应式设计** - 完美适配桌面和移动设备
+- 🔐 **User Authentication** - Secure registration/login system with JWT token verification
+- 💓 **Heartbeat Maintenance** - Automatic heartbeat detection to maintain online status
+- 🌐 **Gateway Management** - Local management of multiple gateway configurations
+- 📊 **Real-time Monitoring** - Real-time viewing of agent status and operations
+- 🎨 **Modern UI** - Modern interface based on Vue 3 + Element Plus
+- 📱 **Responsive Design** - Perfect adaptation for desktop and mobile devices
+- 🌍 **Internationalization** - Support for Chinese and English languages
 
 ---
 
-## 🚀 快速开始
+## 🚀 Quick Start
 
-### 环境要求
+### Prerequisites
 
 - Node.js >= 18.0.0
 - npm >= 9.0.0
 
-### 安装步骤
+### Installation
 
 ```bash
-# 1. 克隆项目
+# 1. Clone the repository
 git clone https://github.com/flik2002/openclaw-monitor-frontend.git
 cd openclaw-monitor-frontend
 
-# 2. 安装依赖
+# 2. Install dependencies
 npm install
 
-# 3. 配置环境变量
+# 3. Configure environment variables
 cp .env.example .env
-# 编辑 .env 文件，配置API地址
+# Edit .env file and configure API address
 
-# 4. 启动开发服务器
+# 4. Start development server
 npm run dev
 
-# 5. 构建生产版本
+# 5. Build for production
 npm run build
 ```
 
-### 访问应用
+### Access the Application
 
-- 开发环境: http://localhost:5173
-- 生产环境: 配置你的服务器地址
-
----
-
-## 🏗️ 技术栈
-
-### 前端技术
-
-- **框架**: Vue 3 (Composition API)
-- **构建工具**: Vite
-- **UI组件库**: Element Plus
-- **状态管理**: Pinia
-- **路由**: Vue Router
-- **HTTP客户端**: Axios
-- **样式**: CSS3 + Scoped CSS
-
-### 后端技术（独立仓库）
-
-- **运行时**: Node.js
-- **框架**: Express
-- **数据库**: SQLite (sql.js)
-- **认证**: JWT
-- **进程管理**: PM2
+- Development: http://localhost:5173
+- Production: Configure your server address
 
 ---
 
-## 📁 项目结构
+## 🏗️ Tech Stack
+
+### Frontend Technologies
+
+- **Framework**: Vue 3 (Composition API)
+- **Build Tool**: Vite 5.0.10
+- **UI Library**: Element Plus 2.4.4
+- **State Management**: Pinia 2.1.7
+- **Router**: Vue Router 4.2.5
+- **HTTP Client**: Axios 1.6.2
+- **Charts**: ECharts 5.4.3
+- **Local Database**: Dexie 3.2.4 (IndexedDB)
+- **i18n**: Vue I18n 9.8.0
+
+### Backend Technologies (Separate Repository)
+
+- **Runtime**: Node.js
+- **Framework**: Express
+- **Database**: SQLite (sql.js)
+- **Authentication**: JWT
+- **Process Manager**: PM2
+
+---
+
+## 📁 Project Structure
 
 ```
-biglegs/
-├── public/              # 静态资源
+openclaw-monitor-frontend/
+├── public/              # Static assets
 ├── src/
-│   ├── assets/         # 资源文件
-│   ├── components/     # Vue组件
-│   ├── router/         # 路由配置
-│   ├── stores/         # Pinia状态管理
-│   ├── views/          # 页面视图
-│   ├── App.vue         # 根组件
-│   └── main.js         # 入口文件
-├── .env.example        # 环境变量示例
-├── LICENSE             # MIT许可证
-├── package.json        # 项目配置
-└── README.md           # 项目文档
+│   ├── assets/         # Resource files
+│   ├── components/     # Vue components
+│   │   ├── common/    # Common components
+│   │   ├── gateway/   # Gateway components
+│   │   ├── layout/    # Layout components
+│   │   └── monitor/   # Monitor components
+│   ├── config/        # Configuration files
+│   ├── i18n/          # Internationalization
+│   │   └── locales/   # Language files
+│   ├── router/        # Router configuration
+│   ├── services/      # Service layer
+│   ├── stores/        # Pinia state management
+│   ├── utils/         # Utility functions
+│   ├── views/         # Page views
+│   │   ├── admin/     # Admin pages
+│   │   ├── auth/      # Authentication pages
+│   │   ├── legal/     # Legal pages
+│   │   └── monitor/   # Monitor pages
+│   ├── App.vue        # Root component
+│   └── main.js        # Entry file
+├── .env.example        # Environment variable example
+├── .gitignore         # Git ignore file
+├── LICENSE            # MIT License
+├── package.json       # Project configuration
+└── README.md          # Documentation
 ```
 
 ---
 
-## 🔧 配置说明
+## 🔧 Configuration
 
-### 环境变量
+### Environment Variables
 
-创建 `.env` 文件并配置以下变量：
+Create a `.env` file and configure the following variables:
 
 ```env
-# API基础URL
+# API Base URL
 VITE_API_BASE_URL=http://your-api-server/api
+
+# Application Title
+VITE_APP_TITLE=OpenClaw Monitor
 ```
 
 ---
 
-## 📱 功能模块
+## 📱 Features
 
-### 1. 用户认证
+### 1. User Authentication
 
-- 用户注册（邮箱验证）
-- 用户登录（JWT Token）
-- 自动登录状态保持
-- 安全登出
+- User registration (with email verification)
+- User login (JWT Token)
+- Automatic login state persistence
+- Secure logout
 
-### 2. 心跳维持
+### 2. Heartbeat Maintenance
 
-- 自动30秒心跳检测
-- 在线状态实时更新
-- 断线自动重连
+- Automatic 30-second heartbeat detection
+- Real-time online status updates
+- Automatic reconnection on disconnect
 
-### 3. Gateway管理
+### 3. Gateway Management
 
-- 本地存储Gateway配置
-- 添加/删除/编辑Gateway
-- 测试Gateway连接
-- 多Gateway切换
+- Local storage of gateway configurations
+- Add/Delete/Edit gateways
+- Test gateway connections
+- Multi-gateway switching
 
-### 4. 智能体监控
+### 4. Agent Monitoring
 
-- 实时状态显示
-- 历史数据查看
-- 性能指标监控
-- 告警通知
+- Real-time status display
+- Historical data viewing
+- Performance metrics monitoring
+- Alert notifications
 
----
+### 5. Internationalization
 
-## 🤝 贡献指南
-
-我们欢迎所有形式的贡献！
-
-### 贡献方式
-
-1. Fork 本仓库
-2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 提交 Pull Request
-
-### 代码规范
-
-- 使用 ESLint 进行代码检查
-- 遵循 Vue 3 官方风格指南
-- 编写清晰的提交信息
+- Chinese (zh-CN)
+- English (en-US)
+- Automatic language detection
 
 ---
 
-## 📄 开源协议
+## 📦 Dependencies
 
-本项目基于 [MIT](./LICENSE) 协议开源。
+### Main Dependencies
+
+```json
+{
+  "vue": "^3.3.11",
+  "element-plus": "^2.4.4",
+  "pinia": "^2.1.7",
+  "vue-router": "^4.2.5",
+  "axios": "^1.6.2",
+  "echarts": "^5.4.3",
+  "dexie": "^3.2.4",
+  "vue-i18n": "^9.8.0"
+}
+```
+
+### Development Dependencies
+
+```json
+{
+  "vite": "^5.0.10",
+  "@vitejs/plugin-vue": "^4.5.2",
+  "eslint": "^8.56.0",
+  "prettier": "^3.1.1"
+}
+```
 
 ---
 
-## 🙏 致谢
+## 🤝 Contributing
 
-感谢所有贡献者和开源社区的支持！
+We welcome all forms of contributions!
+
+### How to Contribute
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+### Code Standards
+
+- Use ESLint for code linting
+- Follow Vue 3 official style guide
+- Write clear commit messages
 
 ---
 
-## 📞 联系方式
+## 📄 License
 
-- 项目主页: https://github.com/flik2002/openclaw-monitor-frontend
-- 问题反馈: https://github.com/flik2002/openclaw-monitor-frontend/issues
-- 邮箱: 5003698@qq.com
+This project is licensed under the [MIT](./LICENSE) License.
+
+---
+
+## 🌐 Browser Support
+
+- Chrome >= 87
+- Firefox >= 78
+- Safari >= 14
+- Edge >= 88
+
+---
+
+## 🙏 Acknowledgments
+
+Thanks to all contributors and the open-source community for their support!
+
+---
+
+## 📞 Contact
+
+- Project Homepage: https://github.com/flik2002/openclaw-monitor-frontend
+- Issue Tracker: https://github.com/flik2002/openclaw-monitor-frontend/issues
+- Email: 5003698@qq.com
 
 ---
 
 <div align="center">
 
-**⭐ 如果这个项目对你有帮助，请给一个 Star ⭐**
+**⭐ If this project helps you, please give it a Star ⭐**
 
-Made with ❤️ by Biglegs Team
+Made with ❤️ by OpenClaw Team
 
 </div>
