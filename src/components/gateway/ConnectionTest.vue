@@ -56,28 +56,38 @@ const handleTest = async () => {
   console.log('ConnectionTest - token:', props.token ? 'set' : 'not set')
 
   try {
-    const response = await http.post('/api/gateway/test', {
-      gatewayUrl: props.gatewayUrl,
-      token: props.token
+    // 直接在前端测试Gateway连接，不通过后端
+    const startTime = Date.now()
+    const response = await fetch(`${props.gatewayUrl}/api/status`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${props.token}`,
+        'Content-Type': 'application/json'
+      }
     })
+    const latency = Date.now() - startTime
 
     console.log('ConnectionTest - test response:', response)
 
-    if (response.success) {
-      testResult.value = response.data
-
-      if (response.data.connected) {
-        console.log('ConnectionTest - connection success')
-        emit('success', response.data)
-      } else {
-        console.log('ConnectionTest - connection failed')
-        emit('fail')
+    if (response.ok) {
+      const data = await response.json()
+      testResult.value = {
+        connected: true,
+        latency: latency,
+        message: '连接成功'
       }
+      console.log('ConnectionTest - connection success')
+      emit('success', { connected: true, latency, data })
+    } else {
+      testResult.value = {
+        connected: false,
+        message: `连接失败: ${response.status} ${response.statusText}`
+      }
+      console.log('ConnectionTest - connection failed')
+      emit('fail')
     }
   } catch (error) {
     console.error('ConnectionTest - test connection failed:', error)
-    console.error('ConnectionTest - error status:', error.response?.status)
-    console.error('ConnectionTest - error response data:', error.response?.data)
 
     // 详细的错误信息
     let errorMessage = t('gateway.testFailed')
