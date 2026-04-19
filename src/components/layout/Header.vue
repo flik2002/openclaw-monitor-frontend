@@ -100,23 +100,11 @@ const showBindWizard = ref(false)
 const showMultiAccountsManager = ref(false)
 let hasFetchedAnnouncements = false // 标记是否已经获取过公告
 
-// 获取公告
+// 获取公告（暂时禁用，云ECS不支持此接口）
 const fetchAnnouncements = async () => {
-  // 如果已经获取过公告，不再重复获取
-  if (hasFetchedAnnouncements) {
-    console.log('Announcements already fetched, skip duplicate request')
-    return
-  }
-
-  try {
-    const response = await http.get('/api/announcement/list')
-    if (response.success) {
-      announcements.value = response.data
-      hasFetchedAnnouncements = true
-    }
-  } catch (error) {
-    console.error('Failed to fetch announcements:', error)
-  }
+  // 云ECS不支持 /api/announcement/list 接口，暂时禁用
+  announcements.value = []
+  console.log('Announcements feature disabled: cloud ECS does not support /api/announcement/list')
 }
 
 const handleLanguageChange = (lang) => {

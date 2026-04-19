@@ -100,7 +100,7 @@
           <el-input v-model="newAgent.name" :placeholder="t('gateway.inputAgentName')" />
         </el-form-item>
         <el-form-item label="Gateway URL" prop="gatewayUrl">
-          <el-input v-model="newAgent.gatewayUrl" placeholder="http://127.0.0.1:28789" />
+          <el-input v-model="newAgent.gatewayUrl" placeholder="http://127.0.0.1:端口号 或 http://远程IP:端口号" />
         </el-form-item>
         <el-form-item label="Token" prop="token">
           <el-input v-model="newAgent.token" type="password" :placeholder="t('gateway.inputToken')" show-password />
@@ -143,7 +143,7 @@ const agents = ref([
   {
     id: 1,
     name: 'Main Agent',
-    gatewayUrl: 'http://127.0.0.1:28789',
+    gatewayUrl: '', // 用户需要输入网关地址
     token: '331cc2a54bda0d335ec263864c68e9a0ed37547408184ba3',
     connected: true,
     bindTime: new Date(),

@@ -175,40 +175,43 @@ const handleBind = async () => {
   loading.value = true
 
   try {
-    const response = await http.post('/api/gateway/bind', {
+    // 前端独立完成绑定，不请求云ECS
+    const gatewayId = `gateway-${Date.now()}` // 生成唯一ID
+    
+    // 保存网关信息到localStorage
+    const boundGateway = {
+      gatewayId: gatewayId,
+      gatewayUrl: configForm.gatewayUrl,
+      gatewayType: configForm.gatewayUrl.includes('127.0.0.1') || configForm.gatewayUrl.includes('localhost') ? 'local' : 'remote',
+      name: configForm.agentName,
+      status: 'connected',
+      token: configForm.token
+    }
+    
+    localStorage.setItem('bound_gateway', JSON.stringify(boundGateway))
+    console.log('Gateway info saved to localStorage:', boundGateway)
+
+    // 保存 Token 到 localStorage
+    localStorage.setItem('gatewayToken', configForm.token)
+    console.log('Gateway Token saved to localStorage')
+
+    // 更新Store
+    gatewayStore.addGateway({
+      id: gatewayId,
       agentName: configForm.agentName,
       gatewayUrl: configForm.gatewayUrl,
-      token: configForm.token
+      token: configForm.token,
+      connectionStatus: 'running',
+      boundAt: new Date().toISOString()
     })
 
-    if (response.success) {
-      bindSuccess.value = true
-      discoveredAgents.value = response.data.agents
-
-      // 保存 Token 到 localStorage
-      localStorage.setItem('gatewayToken', configForm.token)
-      console.log('Gateway Token saved to localStorage')
-
-      // 更新Store
-      gatewayStore.addGateway({
-        id: response.data.gatewayId,
-        agentName: configForm.agentName,
-        gatewayUrl: configForm.gatewayUrl,
-        token: configForm.token,
-        connectionStatus: 'running'
-      })
-
-      // 添加智能体到Store
-      response.data.agents.forEach(agent => {
-        agentStore.addAgent(agent)
-      })
-
-      currentStep.value = 2
-      emit('success')
-    }
+    bindSuccess.value = true
+    discoveredAgents.value = [] // 暂时没有agents数据
+    currentStep.value = 2
+    emit('success')
   } catch (error) {
     bindSuccess.value = false
-    bindError.value = error.response?.data?.message || t('gateway.bindFailed')
+    bindError.value = error.message || '绑定失败'
     currentStep.value = 2
   } finally {
     loading.value = false

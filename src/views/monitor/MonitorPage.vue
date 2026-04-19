@@ -116,17 +116,11 @@ const selectedAgentId = computed(() => agentStore.selectedTabId)
 const hasGateways = computed(() => gatewayStore.gateways.length > 0)
 const isLoading = ref(true) // 添加加载状态
 
-// 获取广告
+// 获取广告（暂时禁用，云ECS不支持此接口）
 const fetchAds = async () => {
-  try {
-    const response = await http.get('/api/ad/list')
-    if (response.success) {
-      ads.value = response.data
-    }
-  } catch (error) {
-    console.error('Failed to fetch ads:', error)
-    ads.value = []
-  }
+  // 云ECS不支持 /api/ad/list 接口，暂时禁用
+  ads.value = []
+  console.log('Ads feature disabled: cloud ECS does not support /api/ad/list')
 }
 
 // 获取用户的Gateway列表
@@ -134,47 +128,50 @@ const fetchGateways = async () => {
   if (!userStore.isLoggedIn) return
 
   try {
-    // 直接调用后端的getGatewayStatus接口获取完整数据
-    const response = await http.post('/api/gateway/status')
+    // 从本地存储获取已绑定的网关信息
+    const boundGatewayStr = localStorage.getItem('bound_gateway')
 
-    console.log('fetchGateways response:', response)
-
-    if (response.success && response.data) {
-      const { gateways, agents } = response.data
-
-      console.log('Parsed gateways:', gateways)
-      console.log('Parsed agents:', agents)
-
-      // 设置Gateway数据到store
-      gatewayStore.setGateways(gateways || [])
-
-      // 设置Agent数据到store
-      if (agents && agents.length > 0) {
-        const agentsWithGatewayId = agents.map(agent => ({
-          ...agent,
-          ui_state: agent.ui_state || 'normal'
-        }))
-        agentStore.setAgents(agentsWithGatewayId)
-      } else {
-        // 后端返回空agents时，清空agentStore
-        agentStore.setAgents([])
-      }
-
-      // 验证数据是否正确设置
-      console.log('After set gatewayStore.gateways:', gatewayStore.gateways)
-      console.log('After set hasGateways:', hasGateways.value)
-      console.log('After set gatewayStore.gateways.length:', gatewayStore.gateways.length)
-
-      // 检查每个gateway的详细信息
-      gatewayStore.gateways.forEach((gw, index) => {
-        console.log(`Gateway ${index}:`, {
-          id: gw.id,
-          agentName: gw.agentName,
-          gatewayUrl: gw.gatewayUrl,
-          connectionStatus: gw.connectionStatus
-        })
-      })
+    if (!boundGatewayStr) {
+      console.log('No bound gateway found')
+      gatewayStore.setGateways([])
+      agentStore.setAgents([])
+      return
     }
+
+    const boundGateway = JSON.parse(boundGatewayStr)
+    console.log('Found bound gateway:', boundGateway)
+
+    // 构建网关列表（从本地存储）
+    const gateways = [{
+      id: boundGateway.gatewayId,
+      gatewayUrl: boundGateway.gatewayUrl,
+      agentName: boundGateway.name || '默认网关',
+      connectionStatus: boundGateway.status || 'connected',
+      boundAt: new Date().toISOString()
+    }]
+
+    console.log('Parsed gateways:', gateways)
+
+    // 设置Gateway数据到store
+    gatewayStore.setGateways(gateways)
+
+    // 清空agents（网关状态不包含agents信息）
+    agentStore.setAgents([])
+
+    // 验证数据是否正确设置
+    console.log('After set gatewayStore.gateways:', gatewayStore.gateways)
+    console.log('After set hasGateways:', hasGateways.value)
+    console.log('After set gatewayStore.gateways.length:', gatewayStore.gateways.length)
+
+    // 检查每个gateway的详细信息
+    gatewayStore.gateways.forEach((gw, index) => {
+      console.log(`Gateway ${index}:`, {
+        id: gw.id,
+        agentName: gw.agentName,
+        gatewayUrl: gw.gatewayUrl,
+        connectionStatus: gw.connectionStatus
+      })
+    })
   } catch (error) {
     console.error('Failed to fetch gateway status:', error)
   }
@@ -214,26 +211,24 @@ const handleDeleteGateway = async (gateway) => {
 
     console.log('Delete gateway:', gateway.id)
 
-    // 先从store中移除该Gateway和对应的Agents
+    // 前端独立完成删除，不请求云ECS
+    // 1. 从localStorage删除网关信息
+    localStorage.removeItem('bound_gateway')
+    localStorage.removeItem('gatewayToken')
+    console.log('Gateway info removed from localStorage')
+
+    // 2. 从store中移除该Gateway和对应的Agents
     gatewayStore.removeGateway(gateway.id)
     // 清理属于该Gateway的agents
     const remainingAgents = agentStore.agents.filter(a => a.gatewayId !== gateway.id)
     agentStore.setAgents(remainingAgents)
 
-    // 调用删除API
-    await http.delete(`/api/gateway/unbind/${gateway.id}`)
-
     ElMessage.success(t('monitor.deleteSuccess'))
-
-    // 重新从后端获取最新数据，确保store与后端一致
-    await fetchGateways()
 
   } catch (error) {
     if (error !== 'cancel') {
       console.error('Failed to delete gateway:', error)
-      ElMessage.error(error.response?.data?.message || t('monitor.deleteFailed'))
-      // 删除失败时，重新获取数据恢复store状态
-      await fetchGateways()
+      ElMessage.error(error.message || '删除失败')
     }
   }
 }

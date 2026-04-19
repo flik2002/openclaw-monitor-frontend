@@ -56,28 +56,56 @@ const handleTest = async () => {
   console.log('ConnectionTest - token:', props.token ? 'set' : 'not set')
 
   try {
-    // 直接在前端测试Gateway连接，不通过后端
+    // 规范化网关URL：将https改为http（本地网关通常使用http）
+    let normalizedUrl = props.gatewayUrl
+    if (normalizedUrl.includes('127.0.0.1') || normalizedUrl.includes('localhost')) {
+      normalizedUrl = normalizedUrl.replace(/^https/, 'http')
+    }
+
+    // 判断是否为本地网关（127.0.0.1 或 localhost）
+    const isLocalGateway = normalizedUrl.includes('127.0.0.1') || normalizedUrl.includes('localhost')
+
+    // 构建请求URL：本地网关使用代理，远程网关直接访问
+    // 测试网关根路径是否可访问
+    let requestUrl
+    if (isLocalGateway) {
+      // 使用Vite代理路径，避免CORS问题
+      requestUrl = '/gateway-api/'
+      console.log('ConnectionTest - using proxy for local gateway')
+    } else {
+      // 远程网关直接访问
+      requestUrl = `${normalizedUrl}/`
+      console.log('ConnectionTest - direct access for remote gateway')
+    }
+
     const startTime = Date.now()
-    const response = await fetch(`${props.gatewayUrl}/api/status`, {
+
+    // 构建请求头
+    const headers = {}
+
+    // 只有Token不为空时才添加Authorization头
+    if (props.token && props.token.trim() !== '') {
+      headers['Authorization'] = `Bearer ${props.token}`
+    }
+
+    // 发送一个简单的GET请求测试连接
+    const response = await fetch(requestUrl, {
       method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${props.token}`,
-        'Content-Type': 'application/json'
-      }
+      headers: headers
     })
     const latency = Date.now() - startTime
 
     console.log('ConnectionTest - test response:', response)
 
-    if (response.ok) {
-      const data = await response.json()
+    // 只要能连接到网关就算成功（200或401都算连接成功）
+    if (response.ok || response.status === 401) {
       testResult.value = {
         connected: true,
         latency: latency,
-        message: '连接成功'
+        message: response.status === 401 ? '连接成功（需要认证）' : '连接成功'
       }
       console.log('ConnectionTest - connection success')
-      emit('success', { connected: true, latency, data })
+      emit('success', { connected: true, latency })
     } else {
       testResult.value = {
         connected: false,
@@ -91,18 +119,10 @@ const handleTest = async () => {
 
     // 详细的错误信息
     let errorMessage = t('gateway.testFailed')
-    if (error.response) {
-      if (error.response.status === 400) {
-        errorMessage = t('gateway.paramError') + (error.response.data?.message || t('gateway.checkGatewayToken'))
-      } else if (error.response.status === 401) {
-        errorMessage = t('gateway.authFailed')
-      } else if (error.response.status === 404) {
-        errorMessage = t('gateway.gatewayNotFound')
-      } else {
-        errorMessage = t('gateway.serverError') + (error.response.data?.message || error.message)
-      }
-    } else if (error.request) {
-      errorMessage = t('gateway.networkError')
+    if (error.message && error.message.includes('Failed to fetch')) {
+      errorMessage = '无法连接到网关，请检查地址和端口是否正确'
+    } else if (error.message && error.message.includes('CORS')) {
+      errorMessage = '跨域请求被阻止，请检查网关CORS配置'
     } else {
       errorMessage = t('gateway.configError') + error.message
     }

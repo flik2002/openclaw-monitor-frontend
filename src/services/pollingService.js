@@ -1,6 +1,6 @@
 import { useAgentStore } from '@/stores/agentStore'
 import { useGatewayStore } from '@/stores/gatewayStore'
-import http from '@/utils/http'
+import { openclawGatewayService } from './openclawGatewayService'
 
 class PollingService {
   constructor() {
@@ -80,16 +80,33 @@ class PollingService {
    */
   async fetchAgentStatus(gateway) {
     try {
-      const response = await http.post('/api/gateway/status', {
-        gatewayId: gateway.id
-      })
+      // 从本地存储获取网关信息
+      const boundGatewayStr = localStorage.getItem('bound_gateway')
 
-      if (response.success) {
-        return response.data
+      if (!boundGatewayStr) {
+        console.log('No bound gateway found, skip fetching status')
+        return null
       }
+
+      const boundGateway = JSON.parse(boundGatewayStr)
+      const gatewayUrl = boundGateway.gatewayUrl
+      const token = boundGateway.token
+
+      if (!gatewayUrl) {
+        console.error('Gateway URL is null')
+        return null
+      }
+
+      // 使用OpenClaw网关服务获取所有指标
+      const metrics = await openclawGatewayService.getAllMetrics(gatewayUrl, token)
+
+      return metrics
     } catch (error) {
       console.error(`Failed to get agent status [${gateway.agentName}]:`, error)
-      return null
+      return {
+        online: false,
+        status: 'offline'
+      }
     }
   }
 

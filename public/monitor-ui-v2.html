@@ -262,7 +262,7 @@ tr:last-child td{border-bottom:none}
 .progress{width:120px;height:6px;background:#f0f0f0;border-radius:3px;display:inline-block}
 .progress-bar{height:100%;background:linear-gradient(90deg,#409eff,#67c23a)}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
-.green{background:#52c41a}.red{background:#ff4d4f}.blue{background:#1890ff}
+.green{background:#52c41a}.red{background:#ff4d4f}.gray{background:#909399}.blue{background:#1890ff}
 
 /* Token 设置对话框 */
 .token-modal{
@@ -419,12 +419,22 @@ function connectToGateway() {
     return;
   }
 
-  console.log('尝试连接到 OpenClaw Gateway: ws://127.0.0.1:28789');
+  // 从localStorage获取网关地址
+  const boundGateway = JSON.parse(localStorage.getItem('bound_gateway') || '{}');
+  const gatewayUrl = boundGateway.gatewayUrl || '';
+
+  if (!gatewayUrl) {
+    console.error('未找到网关地址，请先绑定网关');
+    return;
+  }
+
+  // 将http/https转换为ws/wss
+  const wsUrl = gatewayUrl.replace(/^http/, 'ws');
+
+  console.log('尝试连接到 OpenClaw Gateway:', wsUrl);
   console.log('[WebSocket] 重连次数:', reconnectAttempts, '/', MAX_RECONNECT_ATTEMPTS);
 
   try {
-    // 尝试使用 127.0.0.1 而不是 localhost,因为 Gateway 配置为 loopback
-    const wsUrl = 'ws://127.0.0.1:28789';
     console.log('尝试连接到 OpenClaw Gateway: ' + wsUrl);
     ws = new WebSocket(wsUrl);
 
@@ -584,69 +594,203 @@ function handleConnectChallenge(data) {
   startHttpPolling();
 }
 
+// 格式化在线时长
+function formatUptime(seconds) {
+  if (!seconds || seconds === 0) return '0m';
+  
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+
+  if (days > 0) {
+    return `${days}d ${hours}h ${minutes}m`;
+  } else if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  } else {
+    return `${minutes}m`;
+  }
+}
+
 // ==================== HTTP 轮询函数 ====================
 function startHttpPolling() {
+  // 防止重复启动
+  if (httpPollingTimer) {
+    console.log('[Monitor] HTTP轮询已在运行，跳过');
+    return;
+  }
+  
   console.log('📡 开始 HTTP 轮询');
 
   // 立即获取一次数据
   fetchViaHttp();
 
-  // 每 5 秒获取一次数据
-  httpPollingTimer = setInterval(fetchViaHttp, 5000);
+  // 每 30 秒获取一次数据（大幅减少对OpenClaw网关的干扰）
+  httpPollingTimer = setInterval(fetchViaHttp, 30000);
 
-  // 更新状态
-  isGatewayConnected = true;
-  updateStatusCard();
-  updateMainSessionPanel();
+  // 不预设连接状态，等待health检查结果
+  // isGatewayConnected会在fetchViaHttp中根据health检查结果设置
 }
 
 function fetchViaHttp() {
-  // 使用后端 API 获取 Gateway 状态
+  // 防止重复请求
+  if (window.isFetchingData) {
+    console.log('[Monitor] 请求进行中，跳过本次');
+    return;
+  }
+  
+  window.isFetchingData = true;
+  
+  // 从本地存储获取网关信息
+  const boundGatewayStr = localStorage.getItem('bound_gateway');
+  
+  if (!boundGatewayStr) {
+    console.error('[Monitor] 未找到绑定的网关信息');
+    console.log('💡 请先绑定网关');
+    // 显示离线状态
+    isGatewayConnected = false;
+    updateStatusCard();
+    window.isFetchingData = false;
+    return;
+  }
+
+  let boundGateway;
+  try {
+    boundGateway = JSON.parse(boundGatewayStr);
+  } catch (error) {
+    console.error('[Monitor] 解析网关信息失败:', error);
+    boundGateway = null;
+  }
+
+  // 如果没有绑定信息，使用默认网关配置
+  if (!boundGateway || !boundGateway.gatewayUrl) {
+    console.warn('[Monitor] 未找到网关绑定信息，使用默认配置');
+    boundGateway = {
+      gatewayId: 'default-gateway',
+      gatewayUrl: 'http://127.0.0.1:18789',
+      token: '5e98fba1fb42f1ed15c0b3c5b947ce4d02e483d7e1fc32f8'
+    };
+    // 保存到localStorage，避免下次再提示
+    localStorage.setItem('bound_gateway', JSON.stringify(boundGateway));
+    console.log('[Monitor] 已设置默认网关配置');
+  }
+
+  const gatewayUrl = boundGateway.gatewayUrl;
+  
+  if (!gatewayUrl) {
+    console.error('[Monitor] 网关地址为空');
+    console.log('💡 请重新绑定网关');
+    isGatewayConnected = false;
+    updateStatusCard();
+    return;
+  }
+  
+  console.log('[Monitor] 使用网关地址:', gatewayUrl);
+
+  // 使用网关 API 获取状态
   const userToken = localStorage.getItem('token');  // 用户登录后的 JWT Token
 
   const headers = {
     'Content-Type': 'application/json'
   };
 
-  // 如果有用户 Token,添加到请求头
-  if (userToken) {
-    headers['Authorization'] = `Bearer ${userToken}`;
+  // 规范化网关URL
+  let normalizedUrl = gatewayUrl;
+  if (normalizedUrl.includes('127.0.0.1') || normalizedUrl.includes('localhost')) {
+    normalizedUrl = normalizedUrl.replace(/^https/, 'http');
   }
 
-  fetch('/api/gateway/status', {
-    method: 'POST',
-    headers: headers
-  })
-  .then(response => {
-    if (!response.ok) {
-      console.error('[Monitor] API 请求失败, 状态码:', response.status);
-      return response.json().then(data => {
-        console.error('[Monitor] Error details:', data);
-        throw new Error(data.error || data.message || `API error ${response.status}`);
-      }).catch(e => {
-        if (e.message && !e.message.startsWith('API error')) {
-          throw e;
-        }
-        throw new Error(`API error ${response.status}`);
-      });
-    }
-    return response.json();
-  })
-  .then(data => {
-    console.log('📨 收到后端 API 响应:', data);
+  // 判断是否为本地网关，使用代理
+  const isLocalGateway = normalizedUrl.includes('127.0.0.1') || normalizedUrl.includes('localhost');
 
-    // 检查是否需要登录
-    if (!data.success && (data.message === '未提供认证 Token' || data.message === 'No auth token provided')) {
-      console.error('❌ 需要用户登录');
-      console.log('💡 请先点击右上角"登录/注册"按钮登录系统');
+  // 优化：不发送health请求，直接通过API Wrapper检查Gateway状态
+  // 这样可以避免频繁的HTTP请求干扰OpenClaw Gateway
+  console.log('[Monitor] 检查Gateway状态（通过API Wrapper）');
+
+  // 注意: openclaw-monitor服务不需要Token认证
+  // gatewayToken是用于OpenClaw Gateway的,不是用于monitor API
+  // 所以这里不需要添加Authorization header
+
+  // 直接获取数据，不单独发送health检查
+  // 添加重试机制，处理ERR_NETWORK_CHANGED等临时错误
+  const fetchWithRetry = (url, options, retries = 3) => {
+    return fetch(url, options).catch(err => {
+      if (retries > 0 && (err.name === 'TypeError' || err.message.includes('NETWORK'))) {
+        console.log(`[Monitor] 重试请求: ${url}, 剩余重试次数: ${retries}`);
+        return new Promise(resolve => {
+          setTimeout(() => {
+            fetchWithRetry(url, options, retries - 1).then(resolve).catch(() => resolve(null));
+          }, 1000);
+        });
+      }
+      return null;
+    });
+  };
+
+  // 直接获取数据，不单独发送health检查
+  Promise.all([
+    fetchWithRetry('/monitor-api/api/sessions/list', {
+      method: 'GET',
+      headers: headers
+    }),
+    fetchWithRetry('/monitor-api/api/metrics/system', {
+      method: 'GET',
+      headers: headers
+    }),
+    fetchWithRetry('/monitor-api/api/metrics/memory', {
+      method: 'GET',
+      headers: headers
+    }),
+    fetchWithRetry('/monitor-api/api/messages/stats', {
+      method: 'GET',
+      headers: headers
+    })
+  ]).then(([sessionsRes, systemRes, memoryRes, messagesRes]) => {
+    return Promise.all([
+      sessionsRes && sessionsRes.ok ? sessionsRes.json().catch(() => null) : Promise.resolve(null),
+      systemRes && systemRes.ok ? systemRes.json().catch(() => null) : Promise.resolve(null),
+      memoryRes && memoryRes.ok ? memoryRes.json().catch(() => null) : Promise.resolve(null),
+      messagesRes && messagesRes.ok ? messagesRes.json().catch(() => null) : Promise.resolve(null)
+    ]);
+  }).then(([sessions, systemMetrics, memoryMetrics, messageMetrics]) => {
+    console.log('📊 网关数据:', { sessions, systemMetrics, memoryMetrics, messageMetrics });
+    
+    // 判断Gateway是否在线：如果API返回了有效数据，说明Gateway在线
+    const isOnline = sessions || systemMetrics || memoryMetrics || messageMetrics;
+    
+    if (!isOnline) {
+      // 所有API都失败，Gateway离线
+      console.error('[Monitor] Gateway离线');
+      isGatewayConnected = false;
+      updateStatusCard();
       return;
     }
+    
+    // Gateway在线
+    console.log('✅ Gateway在线');
+    isGatewayConnected = true;
+    updateStatusCard();
+    
+    // 构造网关数据
+    const gatewayData = {
+      gateways: [{
+        id: boundGateway.gatewayId,
+        gatewayUrl: boundGateway.gatewayUrl,
+        connectionStatus: 'running',
+        metrics: {
+          sessions: sessions?.total || 0,
+          model: sessions?.sessions?.[0]?.model || 'modelstudio/qwen3.5-flash',
+          // 使用totalTokenStats获取总Token（历史+当前）
+          tokenUsed: sessions?.totalTokenStats?.totalTokens || sessions?.sessions?.[0]?.estimatedTokens || 0,
+          tokenSource: sessions?.totalTokenStats?.tokenSource || 'estimate',
+          messageCount: sessions?.totalTokenStats?.messageCount || messageMetrics?.global?.totalMessages || 0,
+          onlineTime: formatUptime(systemMetrics?.uptimeSeconds || 0),
+          memoryMB: memoryMetrics?.totals?.rssMB || 0,
+          dailyStats: messageMetrics?.dailyStats || {} // 添加7天趋势数据
+        }
+      }]
+    };
 
-    if (data.success && data.data) {
-      const gatewayData = data.data;
-
-      // 详细日志输出
-      console.log('[Monitor] gatewayData:', JSON.stringify(gatewayData, null, 2));
+    console.log('[Monitor] gatewayData:', JSON.stringify(gatewayData, null, 2));
 
       // 更新会话数 (从第一个 Gateway 获取)
       if (gatewayData.gateways && gatewayData.gateways.length > 0) {
@@ -676,8 +820,22 @@ function fetchViaHttp() {
           document.getElementById('model').textContent = '-';
         }
 
-        // 更新 TOKEN 使用（智能单位显示）
-        totalTokens = metrics.tokenUsed || 0;
+        // 更新 TOKEN 使用（直接使用后端返回的总Token）
+        // 后端已经计算了：总Token = 历史Token + 当前会话Token
+        const totalTokensFromBackend = metrics.tokenUsed || 0;
+        const tokenSource = metrics.tokenSource || 'estimate';
+
+        console.log('[Token] 后端返回的总Token:', totalTokensFromBackend, '数据来源:', tokenSource);
+
+        // 直接使用后端返回的总Token
+        if (totalTokensFromBackend > 0) {
+          totalTokens = totalTokensFromBackend;
+
+          // 保存到localStorage（用于页面刷新后恢复）
+          localStorage.setItem(STORAGE_KEYS.totalTokens, totalTokens);
+        }
+
+        // 显示Token
         if (totalTokens >= 100000000) {
           document.getElementById('token-value').textContent = (totalTokens / 100000000).toFixed(2) + ' ' + t('hundredMillion');
         } else if (totalTokens >= 10000) {
@@ -696,8 +854,43 @@ function fetchViaHttp() {
           }
         }
 
-        // 更新消息数
-        messageCount = metrics.messageCount || 0;
+        // 更新消息数（累计显示）
+        const currentMessageCount = metrics.messageCount || 0;
+        
+        // 累计消息：直接累加当前消息数到总数
+        // 使用lastMessageCount记录上次的值，避免重复累加
+        if (currentMessageCount > 0) {
+          const lastMessageCount = parseInt(localStorage.getItem('lastMessageCount') || '0');
+          
+          // 如果当前消息数比上次大，说明有新消息
+          if (currentMessageCount > lastMessageCount) {
+            const newMessages = currentMessageCount - lastMessageCount;
+            messageCount += newMessages;
+            
+            // 保存到localStorage
+            localStorage.setItem(STORAGE_KEYS.messageCount, messageCount);
+            localStorage.setItem('lastMessageCount', currentMessageCount);
+            
+            console.log('[消息] 新增消息:', newMessages, '累计消息:', messageCount);
+          } else if (currentMessageCount < lastMessageCount) {
+            // 当前消息数比上次小，说明会话被重置了
+            // 将当前消息数累加到总数
+            messageCount += currentMessageCount;
+            
+            localStorage.setItem(STORAGE_KEYS.messageCount, messageCount);
+            localStorage.setItem('lastMessageCount', currentMessageCount);
+            
+            console.log('[消息] 会话重置，累加消息:', currentMessageCount, '累计消息:', messageCount);
+          } else if (lastMessageCount === 0) {
+            // 首次加载，直接使用当前消息数
+            messageCount = currentMessageCount;
+            localStorage.setItem(STORAGE_KEYS.messageCount, messageCount);
+            localStorage.setItem('lastMessageCount', currentMessageCount);
+            
+            console.log('[消息] 首次加载，消息数:', messageCount);
+          }
+        }
+        
         document.getElementById('messages').textContent = messageCount.toLocaleString();
 
         // 更新在线时长（HTTP模式下优先使用后端数据，避免跳变）
@@ -712,9 +905,8 @@ function fetchViaHttp() {
         }
 
         // 更新内存（保存到 gatewayMemoryMB，由 updateMemory 统一显示）
-        if (metrics.memoryUsed) {
-          gatewayMemoryMB = metrics.memoryUsed;
-        }
+        gatewayMemoryMB = metrics.memoryMB || metrics.memoryUsed || 0;
+        updateMemory(); // 立即更新内存显示
 
         // 更新渠道数据
         if (firstGateway.channels && firstGateway.channels.length > 0) {
@@ -732,19 +924,23 @@ function fetchViaHttp() {
         }
 
         console.log('✅ 数据更新成功');
+        
+        // 数据更新后，更新主会话面板
+        updateMainSessionPanel();
       } else {
         console.log('[Monitor] 无 Gateway 数据');
         // 无Gateway数据时设置为离线
         isGatewayConnected = false;
         updateStatusCard();
       }
-    }
-  })
-  .catch(error => {
-    console.error('❌ 后端 API 请求失败:', error.message);
+  }).catch(error => {
+    console.error('❌ API请求失败:', error.message);
     // API请求失败时设置为离线
     isGatewayConnected = false;
     updateStatusCard();
+  }).finally(() => {
+    // 释放请求锁
+    window.isFetchingData = false;
   });
 }
 
@@ -870,7 +1066,7 @@ function updateStatusCard() {
     if (isGatewayConnected) {
       card.innerHTML = '<span class="dot green"></span>' + t('running');
     } else {
-      card.innerHTML = '<span class="dot red"></span>' + t('offline');
+      card.innerHTML = '<span class="dot gray"></span>' + t('offline');
     }
   }
 }
@@ -941,11 +1137,26 @@ function update7DayChart(dailyStats) {
     allDates.push(toLocalDateStr(d));
   }
 
+  // 从localStorage读取历史数据
+  const historyKey = 'monitor_message_history';
+  const history = JSON.parse(localStorage.getItem(historyKey) || '{}');
+  
+  // 合并API返回的数据到历史记录
+  if (dailyStats && Object.keys(dailyStats).length > 0) {
+    for (const date in dailyStats) {
+      if (dailyStats[date].total > 0) {
+        history[date] = dailyStats[date];
+      }
+    }
+    // 保存到localStorage
+    localStorage.setItem(historyKey, JSON.stringify(history));
+  }
+
   const dateLabels = allDates.map(d => d.slice(5)); // "04-07"
-  const users = allDates.map(d => dailyStats[d]?.user || 0);
-  const assistants = allDates.map(d => dailyStats[d]?.assistant || 0);
-  const toolResults = allDates.map(d => dailyStats[d]?.toolResult || 0);
-  const totals = allDates.map(d => dailyStats[d]?.total || 0);
+  const users = allDates.map(d => history[d]?.user || 0);
+  const assistants = allDates.map(d => history[d]?.assistant || 0);
+  const toolResults = allDates.map(d => history[d]?.toolResult || 0);
+  const totals = allDates.map(d => history[d]?.total || 0);
 
   charts.channelChart.setOption({
     title: {text: t('sevenDayTrend'), left: 'center', top: 10, textStyle: {fontSize: 12, color: '#666'}},
@@ -1020,8 +1231,17 @@ function updateTaskList(jobs) {
 function resetToken() {
   totalTokens = 0;
   localStorage.removeItem(STORAGE_KEYS.totalTokens);
+  localStorage.removeItem('lastSessionTokens'); // 清除上次会话Token记录
   updateTokenCard();
   console.log('TOKEN 已重置为 0');
+}
+
+function resetMessage() {
+  messageCount = 0;
+  localStorage.removeItem(STORAGE_KEYS.messageCount);
+  localStorage.removeItem('lastMessageCount'); // 清除上次消息数记录
+  updateMessageCard();
+  console.log('消息数 已重置为 0');
 }
 
 // ==================== 在线时长 ====================
@@ -1192,26 +1412,9 @@ function initMonitor() {
 
 // ==================== 定时刷新 ====================
 function startTimers() {
-  // 每30秒获取会话数
-  setInterval(fetchSessionCount, 30000);
-  
-  // 每30秒获取任务列表
-  setInterval(fetchCronJobs, 30000);
-  
-  // 每5秒更新内存
-  setInterval(updateMemory, 5000);
-  
-  // 每分钟刷新7天趋势图
-  setInterval(function() {
-    const history = get7DayHistory();
-    if (charts.channelChart) {
-      charts.channelChart.setOption({
-        xAxis: {data: history.dates},
-        series: [{data: history.messages}]
-      });
-      console.log('[趋势图] 已刷新');
-    }
-  }, 60000);
+  // 所有数据都由fetchViaHttp统一获取，不需要额外的定时器
+  // fetchViaHttp已经每5秒执行一次，会获取所有需要的数据
+  console.log('[Monitor] 定时器已启动，数据由fetchViaHttp统一获取');
 }
 
 // ==================== 页面加载事件 ====================
@@ -1462,51 +1665,39 @@ function resetMonitorData() {
   if (model) model.textContent = '-';
 }
 
-// 从后端获取Agent列表并更新
+// 从localStorage获取Agent列表并更新
 async function loadAgentsFromBackend() {
   try {
-    const userToken = localStorage.getItem('token');
-    if (!userToken) {
-      console.log('没有用户token，跳过加载Agent列表');
+    console.log('开始加载Agent列表...');
+
+    // 从localStorage读取网关信息
+    const boundGatewayStr = localStorage.getItem('bound_gateway');
+    if (!boundGatewayStr) {
+      console.log('没有绑定网关，跳过加载Agent列表');
       return;
     }
 
-    console.log('开始加载Agent列表...');
-    const response = await fetch('/api/gateway/list', {
-      headers: {
-        'Authorization': `Bearer ${userToken}`
-      }
-    });
+    const boundGateway = JSON.parse(boundGatewayStr);
+    console.log('从localStorage读取的网关信息:', boundGateway);
 
-    if (response.ok) {
-      const data = await response.json();
-      console.log('后端返回的Agent数据:', data);
+    // 将网关信息转换为Agent数据
+    agents = [{
+      id: 'main',
+      name: boundGateway.name || 'Main Agent',
+      gatewayUrl: boundGateway.gatewayUrl,
+      token: boundGateway.token,
+      connected: boundGateway.status === 'connected',
+      gatewayId: boundGateway.gatewayId
+    }];
 
-      if (data.success && data.data && data.data.length > 0) {
-        // 将后端返回的Gateway数据转换为Agent数据
-        agents = data.data.map((gateway, index) => ({
-          id: index === 0 ? 'main' : 'agent_' + gateway.id,
-          name: gateway.agentName,
-          gatewayUrl: gateway.gatewayUrl,
-          token: gateway.token,
-          connected: gateway.connectionStatus === 'running',
-          gatewayId: gateway.id
-        }));
+    console.log('转换后的agents数组:', agents);
+    console.log('agents数量:', agents.length);
 
-        console.log('转换后的agents数组:', agents);
-        console.log('agents数量:', agents.length);
+    renderAgentTabs();
 
-        renderAgentTabs();
-
-        // 自动选中第一个Agent
-        if (agents.length > 0) {
-          switchAgentTab(agents[0].id);
-        }
-      } else {
-        console.log('后端没有返回Agent数据，使用默认Agent');
-      }
-    } else {
-      console.log('加载Agent列表失败，响应状态:', response.status);
+    // 自动选中第一个Agent
+    if (agents.length > 0) {
+      switchAgentTab(agents[0].id);
     }
   } catch (error) {
     console.error('加载Agent列表失败:', error);
